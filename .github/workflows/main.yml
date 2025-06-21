@@ -1,0 +1,61 @@
+name: Build and Release Nxtscape (macOS ARM)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build on macOS ARM
+    runs-on: macos-15
+    steps:
+      - name: Checkout Nxtscape repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Clone depot_tools
+        run: git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+
+      - name: Add depot_tools to PATH
+        run: echo "$GITHUB_WORKSPACE/depot_tools" >> $GITHUB_PATH
+
+      - name: Fetch Chromium
+        run: |
+          mkdir chromium && cd chromium
+          fetch --no-history chromium
+
+      - name: Build Nxtscape
+        run: |
+          pip install -r requirements.txt
+          python build/build.py -S ${{ github.workspace }}/chromium/src -c build/config/release.yaml
+
+      - name: Archive binary
+        run: |
+          tar -czf nxtscape-macos-arm.tar.gz ${{ github.workspace }}/chromium/output || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nxtscape-macos-arm
+          path: nxtscape-macos-arm.tar.gz
+
+
+  release:
+    name: Upload to GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: nxtscape-macos-arm
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          files: nxtscape-macos-arm.tar.gz
